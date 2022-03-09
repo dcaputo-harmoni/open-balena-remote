@@ -1,0 +1,22 @@
+{
+  "name": "open-balena-remote",
+  "version": "1.0.0",
+  "description": "Open Balena Remote",
+  "author": "David Caputo <dcaput@harmoni.io>",
+  "main": "open-balena-remote.js",
+  "scripts": {
+    "start": "node open-balena-remote.js"
+  },
+  "dependencies": {
+    "express": "^4.16.1",
+    "express-session": "^1.17.2",
+    "memorystore": "^1.6.6",
+    "cookie-parser": "^1.4.6",
+    "http-proxy-middleware": "^2.0.1",
+    "portfinder":"^1.0.28",
+    "node-schedule": "^2.1.0",
+    "uuid": "^8.3.2",
+    "wait-port": "^0.2.9",
+    "pug": "^3.0.2"
+  }
+}

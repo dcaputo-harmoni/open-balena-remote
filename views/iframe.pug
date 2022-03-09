@@ -1,0 +1,7 @@
+html
+  head
+    title= "Open Balena Remote"
+    script(src="/iframe.js")
+    script!= "(function() { sessionStorage.setItem('sessionID','" + sessionID + "'); })();"
+  body(style={padding:"0", margin:"0"})
+    iframe(style={width:"100%", height:"100%", border:"none"}, src=iframe_source)
