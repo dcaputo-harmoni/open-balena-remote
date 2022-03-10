@@ -10,7 +10,6 @@ const schedule = require("node-schedule");
 const session = require("express-session");
 const MemoryStore = require("memorystore")(session)
 const util = require("util")
-const fs = require("fs")
 const uuid = require("uuid");
 const waitPort = require("wait-port");
 
@@ -23,10 +22,12 @@ const START_PROXY_PORT = 10001;
 const END_PROXY_PORT = 10009;
 const COOKIE_SECRET = "bFzjy5TSpypevdWljWspkAqxl8QQSTLG";
 const COOKIE_PREFIX = "remote.";
-const ERROR_PATH = "/error.html"
+const ERROR_PATH = "/error.html";
 
-// TO DO: generate container HTTP routes via service tags from postgrest
 const routes = {
+  "tunnel": {
+    "route": "http://127.0.0.1:tunnel",
+  },
   "vnc": {
     "remotePort": 5900,
     "serverCmd": "/usr/local/bin/websockify --web /usr/share/novnc_root localPort 127.0.0.1:tunnelPort",
@@ -88,24 +89,27 @@ async function initialRequestHandler (req, res, next) {
           await updateSession(sessionID, sessionData);
           // log in to openbalena via balena-cli
           await executeCommand(loginCmd, { apiKey: req.query.apiKey }, false);
+          // get remote port
+          var remotePort = routes[req.query.service].remotePort ? routes[req.query.service].remotePort : req.query.port;
+          if (!remotePort) { throw "Port must be provided to tunnel" }
           // open vpn tunnel via balena-cli
           sessionData.tunnel = { port: await portfinder.getPortPromise({ port: 20000, stopPort: 29999 }) };
           sessionData.tunnel.pid = await executeCommand(tunnelCmd, {
             uuid: req.query.uuid, 
-            remotePort: routes[req.query.service].remotePort,
+            remotePort: remotePort,
             localPort: sessionData.tunnel.port
             }, true);
           await updateSession(sessionID, sessionData);
           var portOpen = await waitPort({ host: "127.0.0.1", port: sessionData.tunnel.port, timeout: 10 * 1000 });
           if (!portOpen) { throw "Unable to open VPN tunnel" };
-          if (DEBUG) console.log("Opened VPN tunnel from 127.0.0.1:" + sessionData.tunnel.port + " to remote device " + req.query.uuid + ":" + routes[req.query.service].remotePort + " with PID " + sessionData.tunnel.pid);
+          if (DEBUG) console.log("Opened VPN tunnel from 127.0.0.1:" + sessionData.tunnel.port + " to remote device " + req.query.uuid + ":" + remotePort + " with PID " + sessionData.tunnel.pid);
           var redirect = req.protocol + "://" + req.headers.host.split(":")[0] + ":" + sessionData.proxyPort;
           // if necessary to start custom server to faciltate request, do so
           if (routes[req.query.service].serverCmd) {
             sessionData.server = { port: await portfinder.getPortPromise({ port: 30000, stopPort: 39999 }) };
             sessionData.server.pid = await executeCommand(routes[req.query.service].serverCmd, {
               localPort: sessionData.server.port,
-              remotePort: routes[req.query.service].remotePort,
+              remotePort: remotePort,
               tunnelPort: sessionData.tunnel.port
             }, true);
             await updateSession(sessionID, sessionData);
@@ -121,7 +125,7 @@ async function initialRequestHandler (req, res, next) {
             });
           // otherwise just pass on path based on url provided with initial request to remote
           } else {
-            ["service", "apiKey", "uuid", "container"].forEach(item => delete req.query[item]);
+            ["service", "apiKey", "uuid", "container", "port"].forEach(item => delete req.query[item]);
             redirect += req._parsedUrl.pathname + "?" + (new URLSearchParams(req.query)).toString();
           }
           var cookieParams = sessionParams.cookie;
