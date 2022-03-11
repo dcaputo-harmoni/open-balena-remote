@@ -12,6 +12,7 @@ const MemoryStore = require("memorystore")(session)
 const util = require("util")
 const uuid = require("uuid");
 const waitPort = require("wait-port");
+require('dotenv').config()
 
 const DEBUG = false;
 
@@ -26,7 +27,7 @@ const ERROR_PATH = "/error.html";
 
 const routes = {
   "tunnel": {
-    "route": "http://127.0.0.1:tunnel",
+    "route": "protocol://127.0.0.1:tunnel",
   },
   "vnc": {
     "remotePort": 5900,
@@ -56,7 +57,7 @@ const sessionStoreDestroy = util.promisify(sessionStore.destroy.bind(sessionStor
 const sessionParams = {
   secret: COOKIE_SECRET,
   saveUninitialized: false,
-  cookie: {path: "/", httpOnly: true, secure: true, signed: true, maxAge: 6 * 60 * 60 * 1000}, // six hour session max 6 * 60 * 60 * 1000
+  cookie: {path: "/", httpOnly: true, secure: true, sameSite: "None", signed: true, maxAge: 6 * 60 * 60 * 1000}, // six hour session max 6 * 60 * 60 * 1000
   resave: false,
   store: sessionStore,
   unset: "destroy",
@@ -125,7 +126,12 @@ async function initialRequestHandler (req, res, next) {
             });
           // otherwise just pass on path based on url provided with initial request to remote
           } else {
-            ["service", "apiKey", "uuid", "container", "port"].forEach(item => delete req.query[item]);
+            // save protocol (if provided) in session
+            if (req.query.protocol) {
+              sessionData.protocol = req.query.protocol;
+              await updateSession(sessionID, sessionData);
+            }
+            ["service", "apiKey", "uuid", "container", "port", "protocol"].forEach(item => delete req.query[item]);
             redirect += req._parsedUrl.pathname + "?" + (new URLSearchParams(req.query)).toString();
           }
           var cookieParams = sessionParams.cookie;
@@ -172,8 +178,13 @@ const proxyMiddlewareConfig = {
       }
     }
     if (DEBUG) console.log("Proxy called with session data loaded:" + util.inspect(req.session.data));
+    var route = routes[req.session.data.activeService].route;
+    // include protocol as needed
+    route = route.replace(/protocol/gi, (matched) => {
+      return req.session.data[matched];
+    });
     // include tunnel or server port as needed
-    var route = routes[req.session.data.activeService].route.replace(/tunnel|server/gi, (matched) => {
+    route = route.replace(/tunnel|server/gi, (matched) => {
       return req.session.data[matched] ? req.session.data[matched].port : "";
     });
     // finally, route!

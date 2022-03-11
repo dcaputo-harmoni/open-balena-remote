@@ -79,6 +79,4 @@ RUN chmod +x scripts/*
 
 COPY start.sh ./
 
-ENV BALENARC_BALENA_URL="openbalena.local"
-
 CMD ["bash", "start.sh"]
