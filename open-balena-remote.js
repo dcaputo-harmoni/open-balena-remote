@@ -12,6 +12,7 @@ const MemoryStore = require("memorystore")(session)
 const util = require("util")
 const uuid = require("uuid");
 const waitPort = require("wait-port");
+const fs = require('fs');
 require('dotenv').config()
 
 const DEBUG = false;
@@ -88,8 +89,23 @@ async function initialRequestHandler (req, res, next) {
           sessionData.proxyPort = await getProxyPort(req.signedCookies);
           if (DEBUG) console.log("Setting proxy port to: " + sessionData.proxyPort);
           await updateSession(sessionID, sessionData);
-          // log in to openbalena via balena-cli
-          await executeCommand(loginCmd, { apiKey: req.query.apiKey }, false);
+          // create unique session directory to hold balena token for this session
+          sessionData.sessionDir = "/tmp/" + uuid.v1();
+          if (!(fs.existsSync(sessionData.sessionDir))) {
+              fs.mkdirSync(sessionData.sessionDir);
+          }
+          if (!req.query.jwt && !req.query.apiKey) {
+            throw "At least one of jwt or apiKey must be specified";
+          }
+          if (req.query.jwt) {
+            // save provided JWT to session folder
+            fs.writeFileSync(`${sessionData.sessionDir}/token`, req.query.jwt);
+          } else {
+            // otherwise log in to openbalena using apiKey to get jwt
+            await executeCommand(loginCmd, { 
+              apiKey: req.query.apiKey 
+            }, {BALENARC_DATA_DIRECTORY: sessionData.sessionDir}, false);
+          }
           // get remote port
           var remotePort = routes[req.query.service].remotePort ? routes[req.query.service].remotePort : req.query.port;
           if (!remotePort) { throw "Port must be provided to tunnel" }
@@ -98,8 +114,9 @@ async function initialRequestHandler (req, res, next) {
           sessionData.tunnel.pid = await executeCommand(tunnelCmd, {
             uuid: req.query.uuid, 
             remotePort: remotePort,
-            localPort: sessionData.tunnel.port
-            }, true);
+            localPort: sessionData.tunnel.port,
+            tunnelID: sessionData.tunnel.id
+            }, {BALENARC_DATA_DIRECTORY: sessionData.sessionDir}, true);
           await updateSession(sessionID, sessionData);
           var portOpen = await waitPort({ host: "127.0.0.1", port: sessionData.tunnel.port, timeout: 10 * 1000 });
           if (!portOpen) { throw "Unable to open VPN tunnel" };
@@ -111,8 +128,8 @@ async function initialRequestHandler (req, res, next) {
             sessionData.server.pid = await executeCommand(routes[req.query.service].serverCmd, {
               localPort: sessionData.server.port,
               remotePort: remotePort,
-              tunnelPort: sessionData.tunnel.port
-            }, true);
+              tunnelPort: sessionData.tunnel.port,
+            }, {}, true);
             await updateSession(sessionID, sessionData);
             portOpen = await waitPort({host: "127.0.0.1", port: sessionData.server.port, timeout: 10 * 1000});
             if (!portOpen) { throw "Unable to start server" };
@@ -207,14 +224,14 @@ async function errorResponseHandler (err, req, res, next) {
 }
 
 // Helper function to execute command and return port and PID (returned from shell script)
-async function executeCommand(cmd, params, background) {
+async function executeCommand(cmd, params, envs, background) {
   // replace variables in command using keys from params
   var re = new RegExp(Object.keys(params).join('|'), 'g');
   cmd = cmd.replace(re, match => params[match]);
   if (DEBUG) console.log("Executing command: " + cmd);
   // if executing in background, run as spawn to return child process with pid
   if (background) {
-    var child = spawn(cmd.split(" ")[0], cmd.split(" ").slice(1));
+    var child = spawn(cmd.split(" ")[0], cmd.split(" ").slice(1), { env: { ...process.env, ...envs } });
     if (DEBUG) {
       child.stdout.on('data', (data) => { console.log('stdout: ' + data) });
       child.stderr.on('data', (data) => { console.log('stderr: ' + data) });
@@ -223,7 +240,7 @@ async function executeCommand(cmd, params, background) {
     return child.pid;
   // if executing in foreground, run as execSync
   } else {
-    var result = execSync(cmd);
+    var result = execSync(cmd, { env: { ...process.env, ...envs } });
     if (DEBUG) console.log(result.toString("utf8"));
   }
 }
@@ -354,10 +371,12 @@ async function cleanupSession() {
     if (session) {
       var sessionData = session.data;
       // kill tunnel and server processes; ignore errors on killing (aready killed)
-      try { await executeCommand(killCmd, {pid: sessionData.tunnel.pid}, false); } catch {};
+      try { await executeCommand(killCmd, {pid: sessionData.tunnel.pid}, {}, false); } catch {};
       if (sessionData.server) {
-        try { await executeCommand(killCmd, {pid: sessionData.server.pid}, false); } catch {};
+        try { await executeCommand(killCmd, {pid: sessionData.server.pid}, {}, false); } catch {};
       }
+      // remove session folder
+      fs.rmSync(sessionData.sessionDir, { recursive: true, force: true });
       // remove session data from memory store
       if (DEBUG) console.log("Destroying session in memory store");
       await sessionStoreDestroy(this.sessionID);
