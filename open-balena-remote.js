@@ -58,7 +58,7 @@ const sessionStoreDestroy = util.promisify(sessionStore.destroy.bind(sessionStor
 const sessionParams = {
   secret: COOKIE_SECRET,
   saveUninitialized: false,
-  cookie: {path: "/", httpOnly: true, secure: true, sameSite: "None", signed: true, maxAge: 6 * 60 * 60 * 1000}, // six hour session max 6 * 60 * 60 * 1000
+  cookie: {path: "/", httpOnly: true, secure: process.env.HOST_MODE === "secure", sameSite: "None", signed: true, maxAge: 6 * 60 * 60 * 1000}, // six hour session max 6 * 60 * 60 * 1000
   resave: false,
   store: sessionStore,
   unset: "destroy",
@@ -396,3 +396,12 @@ async function cleanupSession() {
 startProxy(PORT, true);
 var i = START_PROXY_PORT;
 while (i <= END_PROXY_PORT) { startProxy(i++, false); };
+
+// handle possible memory leak per https://github.com/nodejs/node/issues/42154
+process.on('uncaughtException', (error, origin) => {
+  if (error?.code === 'ECONNRESET') return;
+  console.error('UNCAUGHT EXCEPTION');
+  console.error(error);
+  console.error(origin);
+  process.exit(1);
+});
