@@ -3,6 +3,8 @@
 LOCALPORT="$1"
 UUID="$2"
 SSH_CONTAINER="$3"
+USERNAME="$4"
+SESSION_DIR="$5"
 
 SSH_CMD="\
   stty sane; \
@@ -24,6 +26,6 @@ else
     \$CONTAINER /bin/bash"
 fi
 
-ssh -t root@localhost -p $LOCALPORT -o StrictHostKeyChecking=no -o ServerAliveInterval=10 -o LogLevel=ERROR $SSH_CMD
+ssh -t $USERNAME@localhost -i $SESSION_DIR/privateKey -p $LOCALPORT -o StrictHostKeyChecking=no -o ServerAliveInterval=10 -o LogLevel=ERROR $SSH_CMD
 
 sleep infinity

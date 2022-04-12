@@ -38,7 +38,7 @@ const routes = {
   },
   "ssh": {
     "remotePort": 22222,
-    "serverPath": "/ttyd/?arg=port&arg=uuid&arg=container",
+    "serverPath": "/ttyd/?arg=port&arg=uuid&arg=container&arg=username&arg=sessionDir",
     "route": "http://127.0.0.1:7681",
   },
 }
@@ -137,10 +137,15 @@ async function initialRequestHandler (req, res, next) {
           }
           // if routing via server instead of directly to target, generate route path using serverPath
           if (routes[req.query.service].serverPath) {
-            redirect += routes[req.query.service].serverPath.replace(/port|uuid|container/gi, function(matched){
+            redirect += routes[req.query.service].serverPath.replace(/port|uuid|container|username|sessionDir/gi, function(matched){
               // replace port with server port first (if specified), then tunnel port if no server
-              return req.query[matched] || (sessionData.server ? sessionData.server[matched] : sessionData.tunnel[matched]) || "";
+              return (req.query[matched] ? encodeURIComponent(req.query[matched]) : (sessionData.server ? sessionData.server[matched] : sessionData.tunnel[matched])) || sessionData[matched] || "";
             });
+            // save private key to session directory if provided
+            if (req.query.privateKey) {
+              fs.writeFileSync(`${sessionData.sessionDir}/privateKey`, req.query.privateKey);
+              fs.chmodSync(`${sessionData.sessionDir}/privateKey`, "0600");
+            }
           // otherwise just pass on path based on url provided with initial request to remote
           } else {
             // save protocol (if provided) in session
