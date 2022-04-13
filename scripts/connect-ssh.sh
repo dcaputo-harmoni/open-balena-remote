@@ -26,6 +26,6 @@ else
     \$CONTAINER /bin/bash"
 fi
 
-ssh -t $USERNAME@localhost -i $SESSION_DIR/privateKey -p $LOCALPORT -o StrictHostKeyChecking=no -o ServerAliveInterval=10 -o LogLevel=ERROR $SSH_CMD
+ssh -t $USERNAME@localhost -i $SESSION_DIR/privateKey -p $LOCALPORT -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ServerAliveInterval=10 -o LogLevel=ERROR $SSH_CMD
 
 sleep infinity
