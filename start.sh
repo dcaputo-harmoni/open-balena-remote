@@ -10,6 +10,6 @@
     &
 
 # Start open-balena-remote
-node open-balena-remote.js &
+node dist/index.js
 
 sleep infinity

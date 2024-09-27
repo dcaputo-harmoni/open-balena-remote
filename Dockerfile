@@ -66,12 +66,9 @@ WORKDIR /usr/src/app
 COPY --from=build /usr/local/bin/ttyd /usr/local/bin
 COPY --from=build /usr/local/share/man/man1/ttyd.1 /usr/local/share/man/man1
 
-COPY open-balena-remote.js ./
-COPY package.json ./
-COPY html ./html
-COPY views ./views
+COPY . .
 
-RUN npm install --silent
+RUN npm install --silent && npm run build
 
 COPY scripts ./scripts
 
