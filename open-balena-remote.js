@@ -195,8 +195,11 @@ const proxyMiddlewareConfig = {
       if (req.protocol) {
         throw "Proxy called without a valid session";
       } else {
-        // if websocket request with invalid session, handle downstream
-        return req.rawHeaders[req.rawHeaders.indexOf("Origin") + 1];
+        // if no session, return origin or host header as default origin
+        const originIndex = [req.rawHeaders.indexOf("origin"), req.rawHeaders.indexOf("Origin")].find(i => i !== -1);
+        const hostIndex = [req.rawHeaders.indexOf("host"), req.rawHeaders.indexOf("Host")].find(i => i !== -1);
+        // if no origin or host header, return default origin to avoid unhandled exception
+        return req.rawHeaders[originIndex + 1] ?? `http://${req.rawHeaders[hostIndex + 1] ?? "no-origin.com"}`;       
       }
     }
     if (DEBUG) console.log("Proxy called with session data loaded:" + util.inspect(req.session.data));
